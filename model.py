@@ -16,12 +16,16 @@ class Model:
         bw_cell = tf.nn.rnn_cell.DropoutWrapper(bw_cell, output_keep_prob=0.5)
         fw_cell = tf.nn.rnn_cell.MultiRNNCell([fw_cell] * args.num_layers, state_is_tuple=True)
         bw_cell = tf.nn.rnn_cell.MultiRNNCell([bw_cell] * args.num_layers, state_is_tuple=True)
+        #考虑self.input_data 是0,1这种的onehot的格式
         words_used_in_sent = tf.sign(tf.reduce_max(tf.abs(self.input_data), reduction_indices=2))
         self.length = tf.cast(tf.reduce_sum(words_used_in_sent, reduction_indices=1), tf.int32)
+        #由于bidirectional_rnn 将数据转换为 batch_size*input_size(此处的input_size 是word的embeddingsize)，总共为文档的长度
         output, _, _ = tf.nn.bidirectional_rnn(fw_cell, bw_cell,
                                                tf.unpack(tf.transpose(self.input_data, perm=[1, 0, 2])),
                                                dtype=tf.float32, sequence_length=self.length)
         weight, bias = self.weight_and_bias(2 * args.rnn_size, args.class_size)
+        #output是一种 seqence_length * batch_size* (rnn_size*2) ==> batch_size* sequence_length* (rnn*2)
+        #reshape is to make it a as an shape likes [-1, 2 * args.rnn_size]
         output = tf.reshape(tf.transpose(tf.pack(output), perm=[1, 0, 2]), [-1, 2 * args.rnn_size])
         prediction = tf.nn.softmax(tf.matmul(output, weight) + bias)
         self.prediction = tf.reshape(prediction, [-1, args.sentence_length, args.class_size])
